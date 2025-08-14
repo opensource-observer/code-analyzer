@@ -91,3 +91,49 @@ def _git_head_sha(repo_dir: Path) -> Optional[str]:
 def _find_files(root: Path, filename: str) -> List[Path]:
     return [p for p in root.rglob(filename)]
 
+# Python/PyPI: pyproject.toml (PEP 621 + Poetry), requirements*.txt
+
+def _parse_python(repo: Path) -> List[dict]:
+    results = []
+    for pyproj in _find_files(repo, "pyproject.toml"):
+        data = _read_toml(pyproj)
+        if not data:
+            continue
+        for dep in (data.get("project", {}).get("dependencies") or []):
+            results.append({
+                "package_manager": "pypi",
+                "dependency_name": str(dep).split()[0],
+                "dependency_version_requirement": str(dep),
+                "dependency_scope": "runtime",
+                "manifest_path": str(pyproj.relative_to(repo)),
+                "source_type": "manifest",
+                "direct": True,
+            })
+        poetry = data.get("tool", {}).get("poetry", {})
+        for section, scope in (("dependencies", "runtime"), ("dev-dependencies", "development")):
+            for name, spec in (poetry.get(section) or {}).items():
+                results.append({
+                    "package_manager": "pypi",
+                    "dependency_name": name,
+                    "dependency_version_requirement": spec if isinstance(spec, str) else json.dumps(spec),
+                    "dependency_scope": scope,
+                    "manifest_path": str(pyproj.relative_to(repo)),
+                    "source_type": "manifest",
+                    "direct": True,
+                })
+    for req in list(repo.rglob("requirements*.txt")):
+        content = _read_text(req) or ""
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("-r") or line.startswith("--"):
+                continue
+            results.append({
+                "package_manager": "pypi",
+                "dependency_name": re.split(r"[<>=!~ ]", line, maxsplit=1)[0],
+                "dependency_version_requirement": line,
+                "dependency_scope": "runtime",
+                "manifest_path": str(req.relative_to(repo)),
+                "source_type": "manifest",
+                "direct": True,
+            })
+    return results
