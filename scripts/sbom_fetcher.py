@@ -185,28 +185,39 @@ def _parse_rust(repo: Path) -> List[dict]:
 # Git submodules: .gitmodules
 
 def _parse_gitmodules(repo: Path) -> List[dict]:
-    results = []
     gm = repo / ".gitmodules"
     if not gm.exists():
-        return results
-    content = _read_text(gm) or ""
-    current = {}
-    for line in content.splitlines():
-        line = line.strip()
+        return []
+    content = (gm.read_text(encoding="utf-8", errors="ignore") or "")
+    entries: List[dict] = []
+    current: dict = {}
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
         if line.startswith("[submodule"):
             if current:
-                results.append(current)
-            current = {"package_manager": "gitmodules", "dependency_scope": "submodule", "source_type": "submodule", "direct": True}
+                entries.append(current)
+            current = {
+                "package_manager": "gitmodules",
+                "dependency_scope": "submodule",
+                "source_type": "submodule",
+                "direct": True,
+            }
+            m = re.search(r"\[submodule\s+\"([^\"]+)\"\]", line)
+            if m:
+                current["name"] = m.group(1)
         elif "=" in line:
             k, v = [x.strip() for x in line.split("=", 1)]
             current[k] = v
     if current:
-        results.append(current)
-    final = []
-    for entry in results:
-        name = entry.get("submodule") or entry.get("name") or entry.get("path") or ""
+        entries.append(current)
+
+    results: List[dict] = []
+    for entry in entries:
+        name = entry.get("name") or entry.get("path") or ""
         url = entry.get("url") or ""
-        final.append({
+        results.append({
             "package_manager": "gitmodules",
             "dependency_name": name,
             "dependency_version_requirement": url,
@@ -215,7 +226,7 @@ def _parse_gitmodules(repo: Path) -> List[dict]:
             "source_type": "submodule",
             "direct": True,
         })
-    return final
+    return results
 
 
 # Foundry: foundry.toml, lib/*
