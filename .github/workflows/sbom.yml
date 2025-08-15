@@ -1,0 +1,60 @@
+name: SBOM fetcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Owner prefix filter, e.g. opensource-observer/"
+        required: false
+        default: ""
+      limit:
+        description: "Limit number of repos to process (0 = all)"
+        required: false
+        default: "0"
+      incremental:
+        description: "Skip unchanged repos"
+        required: false
+        default: "true"
+  schedule:
+    - cron: "0 7 * * *"  # daily at 07:00 UTC
+
+concurrency:
+  group: sbom-fetcher
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run SBOM fetcher
+        env:
+          OSO_API_KEY: ${{ secrets.OSO_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/sbom_fetcher.py \
+            --output-dir data/sbom \
+            $([ "${{ github.event.inputs.incremental || true }}" = "true" ] && echo "--incremental") \
+            --only "${{ github.event.inputs.only || '' }}" \
+            --limit ${{ github.event.inputs.limit || 0 }}
+
+      - name: Commit and push results
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "SBOM: snapshots and events"
+          file_pattern: data/sbom/**

@@ -13,11 +13,11 @@ export OSO_API_KEY="<your_api_key>"
 # optional for higher clone rate limits
 export GITHUB_TOKEN="<your_gh_pat>"
 
-# Small test run (default limit applies if no --only)
+# Small smoke test run (default limit applies if no --only) to test setup end to end without assuming any specfic owner
 ./.venv/bin/python scripts/sbom_fetcher.py --output-dir data/sbom --incremental
 
-# Focused owner run (no default limit when --only is provided)
-./.venv/bin/python scripts/sbom_fetcher.py --output-dir data/sbom --only opensource-observer/ --limit 0 --incremental
+# Focused owner run (no default limit when --only is provided) to test the actual OSO scoped command
+./.venv/bin/python scripts/sbom_fetcher.py --output-dir data/sbom --only opensource-observer/ --limit 0
 
 # Source the deactivate script:
 source .venv/bin/deactivate
